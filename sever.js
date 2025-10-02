@@ -1,10 +1,10 @@
-// server.js
+// server.js (Corrected Version)
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const app = express();
 
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -14,6 +14,7 @@ app.post('/api/submit-order', async (req, res) => {
     const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+        console.error("Server Error: Missing Telegram Token or Chat ID");
         return res.status(500).json({ success: false, message: 'Server configuration error.' });
     }
 
@@ -33,13 +34,25 @@ app.post('/api/submit-order', async (req, res) => {
 
     try {
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-        await axios.post(url, {
+        
+        // ** THE FIX IS HERE: We now wait for Telegram's response **
+        const telegramResponse = await axios.post(url, {
             chat_id: TELEGRAM_CHAT_ID,
             text: message,
             parse_mode: 'Markdown'
         });
-        res.status(200).json({ success: true, message: 'Order submitted successfully!' });
+
+        // ** AND HERE: We check if Telegram said "ok" **
+        if (telegramResponse.data.ok) {
+            res.status(200).json({ success: true, message: 'Order submitted successfully!' });
+        } else {
+            // If Telegram returns an error, we log it and tell the user.
+            console.error("Telegram API Error:", telegramResponse.data.description);
+            res.status(500).json({ success: false, message: `Telegram Error: ${telegramResponse.data.description}` });
+        }
+
     } catch (error) {
+        // This will catch network errors or other issues with the axios request itself.
         console.error("Error sending to Telegram:", error.message);
         res.status(500).json({ success: false, message: 'Failed to submit order.' });
     }
